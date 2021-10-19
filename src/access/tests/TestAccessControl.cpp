@@ -37,7 +37,7 @@ constexpr ClusterId kColorControlCluster  = 0x00000300;
 constexpr ClusterId kAccessControlCluster = 0x0000001F;
 
 constexpr size_t kSubjectsPerEntry = 4;
-constexpr size_t kTargetsPerEntry = 3;
+constexpr size_t kTargetsPerEntry  = 3;
 
 // Used to detect empty subjects, targets, etc.
 constexpr int kEmptyFlags = 0;
@@ -403,14 +403,14 @@ int Terminate(void * inContext)
 
 int TestAccessControl()
 {
-// clang-format off
+    // clang-format off
     constexpr nlTest tests[] = {
         NL_TEST_DEF("MetaTestIterator", MetaTestIterator),
         NL_TEST_DEF("TestGlobalInstance", TestGlobalInstance),
         NL_TEST_DEF("TestCheck", TestCheck),
         NL_TEST_SENTINEL()
     };
-// clang-format on
+    // clang-format on
 
     nlTestSuite suite = {
         .name       = "AccessControl",
