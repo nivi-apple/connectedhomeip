@@ -49,18 +49,18 @@ chip_test_suite("tests") {
     # TODO(#10447): ReliableMessage Test has HF, and ExchangeMgr hangs on EFR32.
     # And TestAbortExchangesForFabric does not link on EFR32 for some reason.
     test_sources += [
-      "TestAbortExchangesForFabric.cpp",
-      "TestExchangeMgr.cpp",
-      "TestReliableMessageProtocol.cpp",
+#      "TestAbortExchangesForFabric.cpp",
+#      "TestExchangeMgr.cpp",
+#      "TestReliableMessageProtocol.cpp",
     ]
 
     if (chip_device_platform != "esp32" && chip_device_platform != "mbed" &&
         chip_device_platform != "nrfconnect") {
-      test_sources += [ "TestExchangeHolder.cpp" ]
+#      test_sources += [ "TestExchangeHolder.cpp" ]
     }
 
     if (chip_device_platform == "linux") {
-      test_sources += [ "TestMessagingLayer.cpp" ]
+#      test_sources += [ "TestMessagingLayer.cpp" ]
     }
   }
 

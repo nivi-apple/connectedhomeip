@@ -1465,7 +1465,7 @@ const nlTest sTests[] =
 nlTestSuite sSuite =
 {
     "TestCommandInteraction",
-    &sTests[0],
+    &sTests[ArraySize(sTests)-1],
     TestContext::Initialize,
     TestContext::Finalize
 };

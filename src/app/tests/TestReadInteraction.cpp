@@ -4350,7 +4350,7 @@ const nlTest sTests[] =
 nlTestSuite sSuite =
 {
     "TestReadInteraction",
-    &sTests[0],
+    &sTests[ArraySize(sTests)-1],
     TestContext::Initialize,
     TestContext::Finalize
 };

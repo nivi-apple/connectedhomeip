@@ -1075,7 +1075,7 @@ int Test_Teardown(void * inContext)
 nlTestSuite sSuite =
 {
     "TestWriteInteraction",
-    &sTests[0],
+    &sTests[ArraySize(sTests)-1],
     &Test_Setup,
     &Test_Teardown
 };

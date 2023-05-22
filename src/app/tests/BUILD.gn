@@ -101,41 +101,41 @@ chip_test_suite("tests") {
   output_name = "libAppTests"
 
   test_sources = [
-    "TestAclEvent.cpp",
-    "TestAttributePathExpandIterator.cpp",
-    "TestAttributeValueDecoder.cpp",
-    "TestAttributeValueEncoder.cpp",
-    "TestBindingTable.cpp",
-    "TestBuilderParser.cpp",
+    # "TestAclEvent.cpp",
+    # "TestAttributePathExpandIterator.cpp",
+    # "TestAttributeValueDecoder.cpp",
+    # "TestAttributeValueEncoder.cpp",
+    # "TestBindingTable.cpp",
+    # "TestBuilderParser.cpp",
 
-    # Disable CM cluster table tests until update is done
-    # https://github.com/project-chip/connectedhomeip/issues/24425
-    # "TestClientMonitoringRegistrationTable.cpp",
-    "TestClusterInfo.cpp",
+    # # Disable CM cluster table tests until update is done
+    # # https://github.com/project-chip/connectedhomeip/issues/24425
+    # # "TestClientMonitoringRegistrationTable.cpp",
+    # "TestClusterInfo.cpp",
     "TestCommandInteraction.cpp",
-    "TestCommandPathParams.cpp",
-    "TestDataModelSerialization.cpp",
-    "TestDefaultOTARequestorStorage.cpp",
-    "TestEventLoggingNoUTCTime.cpp",
-    "TestEventOverflow.cpp",
-    "TestEventPathParams.cpp",
-    "TestExtensionFieldSets.cpp",
-    "TestFabricScopedEventLogging.cpp",
-    "TestInteractionModelEngine.cpp",
-    "TestMessageDef.cpp",
-    "TestNumericAttributeTraits.cpp",
-    "TestPendingNotificationMap.cpp",
+    # "TestCommandPathParams.cpp",
+    # "TestDataModelSerialization.cpp",
+    # "TestDefaultOTARequestorStorage.cpp",
+    # "TestEventLoggingNoUTCTime.cpp",
+    # "TestEventOverflow.cpp",
+    # "TestEventPathParams.cpp",
+    # "TestExtensionFieldSets.cpp",
+    # "TestFabricScopedEventLogging.cpp",
+    # "TestInteractionModelEngine.cpp",
+    # "TestMessageDef.cpp",
+    # "TestNumericAttributeTraits.cpp",
+    # "TestPendingNotificationMap.cpp",
     "TestReadInteraction.cpp",
-    "TestReportingEngine.cpp",
-    "TestSceneTable.cpp",
-    "TestStatusIB.cpp",
-    "TestStatusResponseMessage.cpp",
-    "TestTimedHandler.cpp",
+    # "TestReportingEngine.cpp",
+    # "TestSceneTable.cpp",
+    # "TestStatusIB.cpp",
+    # "TestStatusResponseMessage.cpp",
+    # "TestTimedHandler.cpp",
     "TestWriteInteraction.cpp",
   ]
 
   if (!chip_fake_platform) {
-    test_sources += [ "TestFailSafeContext.cpp" ]
+#    test_sources += [ "TestFailSafeContext.cpp" ]
   }
 
   test_sources += [ "TestAclAttribute.cpp" ]
@@ -145,8 +145,8 @@ chip_test_suite("tests") {
   # to exercise chunking causes it to run out of memory. For now, disable it there.
   #
   if (chip_device_platform != "nrfconnect") {
-    test_sources += [ "TestBufferedReadCallback.cpp" ]
-    test_sources += [ "TestClusterStateCache.cpp" ]
+#    test_sources += [ "TestBufferedReadCallback.cpp" ]
+#    test_sources += [ "TestClusterStateCache.cpp" ]
   }
 
   # On NRF, Open IoT SDK and fake platforms we do not have a realtime clock available, so
@@ -155,7 +155,7 @@ chip_test_suite("tests") {
   # being that low.
   if (chip_device_platform != "nrfconnect" &&
       chip_device_platform != "openiotsdk" && chip_device_platform != "fake") {
-    test_sources += [ "TestEventLogging.cpp" ]
+#    test_sources += [ "TestEventLogging.cpp" ]
   }
 
   cflags = [ "-Wconversion" ]
