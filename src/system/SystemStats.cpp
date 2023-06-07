@@ -65,6 +65,7 @@ const Label * GetStrings()
 
 count_t * GetResourcesInUse()
 {
+    ChipLogError(chipSystemLayer, "sResourcesInUse = %d", *sResourcesInUse);
     return sResourcesInUse;
 }
 
@@ -77,8 +78,9 @@ void UpdateSnapshot(Snapshot & aSnapshot)
 {
     memcpy(&aSnapshot.mResourcesInUse, &sResourcesInUse, sizeof(aSnapshot.mResourcesInUse));
     memcpy(&aSnapshot.mHighWatermarks, &sHighWatermarks, sizeof(aSnapshot.mHighWatermarks));
-
+ChipLogError(chipSystemLayer, "UpdateSnapshot %d", *sResourcesInUse);
 #if CHIP_SYSTEM_CONFIG_USE_TIMER_POOL
+ChipLogError(chipSystemLayer, "use timer pool");
     chip::System::Timer::GetStatistics(aSnapshot.mResourcesInUse[kSystemLayer_NumTimers],
                                        aSnapshot.mHighWatermarks[kSystemLayer_NumTimers]);
 #endif // CHIP_SYSTEM_CONFIG_USE_TIMER_POOL
@@ -99,6 +101,7 @@ bool Difference(Snapshot & result, Snapshot & after, Snapshot & before)
 
         if (result.mResourcesInUse[i] > 0)
         {
+            ChipLogError(chipSystemLayer, "Difference leak true resources still in use %d", result.mResourcesInUse[i]);
             leak = true;
         }
     }

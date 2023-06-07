@@ -581,8 +581,9 @@ PacketBufferHandle PacketBufferHandle::NewWithData(const void * aData, size_t aD
  */
 void PacketBuffer::Free(PacketBuffer * aPacket)
 {
+    ChipLogError(chipSystemLayer, "PacketBuffer: free called");
 #if CHIP_SYSTEM_CONFIG_USE_LWIP
-
+ChipLogError(chipSystemLayer, "PacketBuffer: free called lwip");
     if (aPacket != nullptr)
     {
         pbuf_free(aPacket);
@@ -591,27 +592,31 @@ void PacketBuffer::Free(PacketBuffer * aPacket)
     }
 
 #elif CHIP_SYSTEM_PACKETBUFFER_FROM_CHIP_HEAP || CHIP_SYSTEM_PACKETBUFFER_FROM_CHIP_POOL
-
+ChipLogError(chipSystemLayer, "PacketBuffer: free called chip heap or pool");
     LOCK_BUF_POOL();
 
     while (aPacket != nullptr)
     {
         PacketBuffer * lNextPacket = aPacket->ChainedBuffer();
-
+        ChipLogError(chipSystemLayer, "PacketBuffer: free called chip heap or pool ref count %d", aPacket->ref);
         VerifyOrDieWithMsg(aPacket->ref > 0, chipSystemLayer, "SystemPacketBuffer::Free: aPacket->ref = 0");
 
         aPacket->ref--;
         if (aPacket->ref == 0)
         {
             SYSTEM_STATS_DECREMENT(chip::System::Stats::kSystemLayer_NumPacketBufs);
+            ChipLogError(chipSystemLayer, "PacketBuffer: free decrement num bufs");
 #if CHIP_SYSTEM_PACKETBUFFER_FROM_CHIP_HEAP
             ::chip::Platform::MemoryDebugCheckPointer(aPacket, aPacket->alloc_size + kStructureSize);
 #endif
+ChipLogError(chipSystemLayer, "PacketBuffer: free clear packet");
             aPacket->Clear();
 #if CHIP_SYSTEM_PACKETBUFFER_FROM_CHIP_POOL
+ChipLogError(chipSystemLayer, "PacketBuffer: free chip pool");
             aPacket->next = sFreeList;
             sFreeList     = aPacket;
 #elif CHIP_SYSTEM_PACKETBUFFER_FROM_CHIP_HEAP
+ChipLogError(chipSystemLayer, "PacketBuffer: free MemoryFree %p", aPacket);
             chip::Platform::MemoryFree(aPacket);
 #endif
             aPacket       = lNextPacket;
