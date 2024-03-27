@@ -238,6 +238,15 @@ struct InterfaceKey
     bool resolveRequestedOnSRPDomain = false;
 };
 
+struct AdditionalResolveContext
+{
+    AdditionalResolveContext() = default;
+    ~AdditionalResolveContext() = default;
+
+    ResolveContext * context;
+    bool srpDomain = false; // maybe see if it can be the same as startSrpTimerForResolve 
+};
+
 struct ResolveContext : public GenericContext
 {
     DnssdResolveCallback callback;
@@ -247,6 +256,9 @@ struct ResolveContext : public GenericContext
     std::shared_ptr<uint32_t> consumerCounter;
     BrowseContext * const browseThatCausedResolve; // Can be null
     bool startSrpTimerForResolve = true;
+
+    AdditionalResolveContext srpResolveContext;
+    AdditionalResolveContext localResolveContext;
 
     // browseCausingResolve can be null.
     ResolveContext(void * cbContext, DnssdResolveCallback cb, chip::Inet::IPAddressType cbAddressType,

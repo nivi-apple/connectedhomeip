@@ -460,7 +460,9 @@ void BrowseWithDelegateContext::OnBrowseRemove(const char * name, const char * t
 ResolveContext::ResolveContext(void * cbContext, DnssdResolveCallback cb, chip::Inet::IPAddressType cbAddressType,
                                const char * instanceNameToResolve, BrowseContext * browseCausingResolve,
                                std::shared_ptr<uint32_t> && consumerCounterToUse) :
-    browseThatCausedResolve(browseCausingResolve)
+    browseThatCausedResolve(browseCausingResolve),
+    srpResolveContext({this, true}),
+    localResolveContext({this, false})
 {
     type            = ContextType::Resolve;
     context         = cbContext;
@@ -472,7 +474,9 @@ ResolveContext::ResolveContext(void * cbContext, DnssdResolveCallback cb, chip::
 
 ResolveContext::ResolveContext(CommissioningResolveDelegate * delegate, chip::Inet::IPAddressType cbAddressType,
                                const char * instanceNameToResolve, std::shared_ptr<uint32_t> && consumerCounterToUse) :
-    browseThatCausedResolve(nullptr)
+    browseThatCausedResolve(nullptr),
+    srpResolveContext({this, true}),
+    localResolveContext({this, false})
 {
     type            = ContextType::Resolve;
     context         = delegate;
