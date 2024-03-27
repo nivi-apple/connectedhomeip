@@ -167,8 +167,7 @@ struct BrowseHandler : public GenericContext
 struct BrowseContext : public BrowseHandler
 {
     DnssdBrowseCallback callback;
-    std::vector<DnssdService> services;
-    std::vector<std::pair<DnssdService, std::string>> domainNames;
+    std::vector<std::pair<DnssdService, std::string>> services;
 
     BrowseContext(void * cbContext, DnssdBrowseCallback cb, DnssdServiceProtocol cbContextProtocol);
 
@@ -225,14 +224,29 @@ struct InterfaceInfo
     std::string fullyQualifiedDomainName;
 };
 
+struct InterfaceKey
+{
+    InterfaceKey() = default;
+    ~InterfaceKey() = default;
+    inline bool operator<(const InterfaceKey & other) const
+    {
+        return (this->interfaceId < other.interfaceId) || ((this->interfaceId == other.interfaceId) && (this->hostname < other.hostname));
+    }
+
+    uint32_t interfaceId;
+    std::string hostname;
+    bool resolveRequestedOnSRPDomain = false;
+};
+
 struct ResolveContext : public GenericContext
 {
     DnssdResolveCallback callback;
-    std::map<uint32_t, InterfaceInfo> interfaces;
+    std::map<InterfaceKey, InterfaceInfo> interfaces;
     DNSServiceProtocol protocol;
     std::string instanceName;
     std::shared_ptr<uint32_t> consumerCounter;
     BrowseContext * const browseThatCausedResolve; // Can be null
+    bool startSrpTimerForResolve = true;
 
     // browseCausingResolve can be null.
     ResolveContext(void * cbContext, DnssdResolveCallback cb, chip::Inet::IPAddressType cbAddressType,
@@ -245,7 +259,7 @@ struct ResolveContext : public GenericContext
     void DispatchFailure(const char * errorStr, CHIP_ERROR err) override;
     void DispatchSuccess() override;
 
-    CHIP_ERROR OnNewAddress(uint32_t interfaceId, const struct sockaddr * address);
+    CHIP_ERROR OnNewAddress(const InterfaceKey & interfaceKey, const struct sockaddr * address);
     bool HasAddress();
 
     void OnNewInterface(uint32_t interfaceId, const char * fullname, const char * hostname, uint16_t port, uint16_t txtLen,

@@ -33,8 +33,10 @@ namespace {
 
 constexpr char kLocalDot[] = "local.";
 
+constexpr char kSrpDot[] = "default.service.arpa.";
+
 constexpr DNSServiceFlags kRegisterFlags        = kDNSServiceFlagsNoAutoRename;
-constexpr DNSServiceFlags kBrowseFlags          = 0;
+constexpr DNSServiceFlags kBrowseFlags          = kDNSServiceFlagsShareConnection;
 constexpr DNSServiceFlags kGetAddrInfoFlags     = kDNSServiceFlagsTimeout | kDNSServiceFlagsShareConnection;
 constexpr DNSServiceFlags kResolveFlags         = kDNSServiceFlagsShareConnection;
 constexpr DNSServiceFlags kReconfirmRecordFlags = 0;
@@ -183,12 +185,23 @@ static void OnBrowse(DNSServiceRef sdRef, DNSServiceFlags flags, uint32_t interf
 
 CHIP_ERROR Browse(BrowseHandler * sdCtx, uint32_t interfaceId, const char * type)
 {
-    ChipLogProgress(Discovery, "Browsing for: %s", StringOrNullMarker(type));
-    DNSServiceRef sdRef;
-    auto err = DNSServiceBrowse(&sdRef, kBrowseFlags, interfaceId, type, kLocalDot, OnBrowse, sdCtx);
+    auto err = DNSServiceCreateConnection(&sdCtx->serviceRef);
     VerifyOrReturnError(kDNSServiceErr_NoError == err, sdCtx->Finalize(err));
 
-    return MdnsContexts::GetInstance().Add(sdCtx, sdRef);
+    // We will browse on both the default domain and the srp domain.
+    ChipLogProgress(Discovery, "Browsing for: %s on local domain", StringOrNullMarker(type));
+
+    auto sdRefLocal = sdCtx->serviceRef; // Mandatory copy because of kDNSServiceFlagsShareConnection
+    err             = DNSServiceBrowse(&sdRefLocal, kBrowseFlags, interfaceId, type, kLocalDot, OnBrowse, sdCtx);
+    VerifyOrReturnError(kDNSServiceErr_NoError == err, sdCtx->Finalize(err));
+
+    ChipLogProgress(Discovery, "Browsing for: %s on domain %s", StringOrNullMarker(type), kSrpDot);
+
+    auto sdRefSrp = sdCtx->serviceRef; // Mandatory copy because of kDNSServiceFlagsShareConnection
+    err           = DNSServiceBrowse(&sdRefSrp, kBrowseFlags, interfaceId, type, kSrpDot, OnBrowse, sdCtx);
+    VerifyOrReturnError(kDNSServiceErr_NoError == err, sdCtx->Finalize(err));
+
+    return MdnsContexts::GetInstance().Add(sdCtx, sdCtx->serviceRef);
 }
 
 CHIP_ERROR Browse(void * context, DnssdBrowseCallback callback, uint32_t interfaceId, const char * type,
@@ -221,7 +234,17 @@ static void OnGetAddrInfo(DNSServiceRef sdRef, DNSServiceFlags flags, uint32_t i
 
     if (kDNSServiceErr_NoError == err)
     {
-        sdCtx->OnNewAddress(interfaceId, address);
+        InterfaceKey interfaceKey;
+        interfaceKey.interfaceId = interfaceId;
+        interfaceKey.hostname = hostname;
+        //interfaceKey.resolveRequestedOnSRPDomain = additionalContext->srpDomain;
+
+        if (interfaceKey.resolveRequestedOnSRPDomain)
+        {
+            sdCtx->startSrpTimerForResolve = false;
+        }
+    
+        sdCtx->OnNewAddress(interfaceKey, address);
     }
 
     if (!(flags & kDNSServiceFlagsMoreComing))
@@ -237,7 +260,7 @@ static void GetAddrInfo(ResolveContext * sdCtx)
 
     for (auto & interface : sdCtx->interfaces)
     {
-        auto interfaceId = interface.first;
+        auto interfaceId = interface.first.interfaceId;
         auto hostname    = interface.second.fullyQualifiedDomainName.c_str();
         auto sdRefCopy   = sdCtx->serviceRef; // Mandatory copy because of kDNSServiceFlagsShareConnection
         auto err = DNSServiceGetAddrInfo(&sdRefCopy, kGetAddrInfoFlags, interfaceId, protocol, hostname, OnGetAddrInfo, sdCtx);
@@ -276,8 +299,13 @@ static CHIP_ERROR Resolve(ResolveContext * sdCtx, uint32_t interfaceId, chip::In
     auto err = DNSServiceCreateConnection(&sdCtx->serviceRef);
     VerifyOrReturnError(kDNSServiceErr_NoError == err, sdCtx->Finalize(err));
 
-    auto sdRefCopy = sdCtx->serviceRef; // Mandatory copy because of kDNSServiceFlagsShareConnection
-    err            = DNSServiceResolve(&sdRefCopy, kResolveFlags, interfaceId, name, type, kLocalDot, OnResolve, sdCtx);
+    // Similar to browse, will try to resolve using both the default domain and the srp domain.
+    auto sdRefLocal = sdCtx->serviceRef; // Mandatory copy because of kDNSServiceFlagsShareConnection
+    err             = DNSServiceResolve(&sdRefLocal, kResolveFlags, interfaceId, name, type, kLocalDot, OnResolve, sdCtx);
+    VerifyOrReturnError(kDNSServiceErr_NoError == err, sdCtx->Finalize(err));
+
+    auto sdRefSrp = sdCtx->serviceRef; // Mandatory copy because of kDNSServiceFlagsShareConnection
+    err           = DNSServiceResolve(&sdRefSrp, kResolveFlags, interfaceId, name, type, kSrpDot, OnResolve, sdCtx);
     VerifyOrReturnError(kDNSServiceErr_NoError == err, sdCtx->Finalize(err));
 
     auto retval = MdnsContexts::GetInstance().Add(sdCtx, sdCtx->serviceRef);
