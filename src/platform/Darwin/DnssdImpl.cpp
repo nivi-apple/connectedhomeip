@@ -35,6 +35,9 @@ constexpr char kLocalDot[] = "local.";
 
 constexpr char kSrpDot[] = "default.service.arpa.";
 
+// The extra time in milliseconds that we will wait for the resolution on the srp domain to complete.
+constexpr uint16_t kSrpTimeoutInMsec = 250;
+
 constexpr DNSServiceFlags kRegisterFlags        = kDNSServiceFlagsNoAutoRename;
 constexpr DNSServiceFlags kBrowseFlags          = kDNSServiceFlagsShareConnection;
 constexpr DNSServiceFlags kGetAddrInfoFlags     = kDNSServiceFlagsTimeout | kDNSServiceFlagsShareConnection;
@@ -133,6 +136,43 @@ std::shared_ptr<uint32_t> GetCounterHolder(const char * name)
 namespace chip {
 namespace Dnssd {
 
+/**
+ * @brief Callback that is called when the timeout for resolving on the kSrpDot domain has expired.
+ *
+ * @param[in] systemLayer The system layer.
+ * @param[in] callbackContext The context passed to the timer callback.
+ */
+void SrpTimerExpiredCallback(System::Layer * systemLayer, void * callbackContext)
+{
+    ChipLogProgress(Discovery, "Mdns: Timer expired for resolve to complete on the srp domain.");
+    auto sdCtx = static_cast<ResolveContext *>(callbackContext);
+    VerifyOrDie(sdCtx != nullptr);
+    sdCtx->Finalize();
+}
+
+/**
+ * @brief Starts a timer to wait for the resolution on the kSrpDot domain to happen.
+ *
+ * @param[in] timeoutSeconds The timeout in seconds.
+ * @param[in] ResolveContext The resolve context.
+ */
+CHIP_ERROR StartSrpTimer(uint16_t timeoutInMSecs, ResolveContext * ctx)
+{
+    VerifyOrReturnValue(ctx != nullptr, CHIP_ERROR_INCORRECT_STATE);
+    return DeviceLayer::SystemLayer().StartTimer(System::Clock::Milliseconds16(timeoutInMSecs), SrpTimerExpiredCallback,
+                                                 reinterpret_cast<void *>(ctx));
+}
+
+/**
+ * @brief Cancels the timer that was started to wait for the resolution on the kSrpDot domain to happen.
+ *
+ * @param[in] ResolveContext The resolve context.
+ */
+void CancelSrpTimer(ResolveContext * ctx)
+{
+    DeviceLayer::SystemLayer().CancelTimer(SrpTimerExpiredCallback, reinterpret_cast<void *>(ctx));
+}
+
 Global<MdnsContexts> MdnsContexts::sInstance;
 
 namespace {
@@ -228,7 +268,11 @@ static void OnGetAddrInfo(DNSServiceRef sdRef, DNSServiceFlags flags, uint32_t i
 {
     ChipLogProgress(Discovery, "Mdns: %s flags: %d, interface: %u, hostname: %s", __func__, flags, (unsigned) interfaceId,
                     StringOrNullMarker(hostname));
-    auto sdCtx = reinterpret_cast<ResolveContext *>(context);
+
+    auto additionalContext = reinterpret_cast<AdditionalResolveContext *>(context);
+    VerifyOrReturn(additionalContext != nullptr, ChipLogError(Discovery, "Context is null"));
+
+    auto sdCtx = reinterpret_cast<ResolveContext *>(additionalContext->context);
     ReturnOnFailure(MdnsContexts::GetInstance().Has(sdCtx));
     LogOnFailure(__func__, err);
 
@@ -237,25 +281,57 @@ static void OnGetAddrInfo(DNSServiceRef sdRef, DNSServiceFlags flags, uint32_t i
         InterfaceKey interfaceKey;
         interfaceKey.interfaceId = interfaceId;
         interfaceKey.hostname = hostname;
-        //interfaceKey.resolveRequestedOnSRPDomain = additionalContext->srpDomain;
-
+        interfaceKey.resolveRequestedOnSRPDomain = additionalContext->srpDomain;
+        sdCtx->OnNewAddress(interfaceKey, address);
         if (interfaceKey.resolveRequestedOnSRPDomain)
         {
-            sdCtx->startSrpTimerForResolve = false;
+            sdCtx->startSrpTimerForResolve = true;
         }
-    
-        sdCtx->OnNewAddress(interfaceKey, address);
     }
 
-    if (!(flags & kDNSServiceFlagsMoreComing))
+    if (flags & kDNSServiceFlagsMoreComing)
     {
-        VerifyOrReturn(sdCtx->HasAddress(), sdCtx->Finalize(kDNSServiceErr_BadState));
+        return;
+    }
+
+    // 1. We have seen an address for something that srpDomain as true i.e startSrpTimerForResolve is false just call finalize
+    // For this check the interfaces for interfaceid + hostname + true key, if found -> finalize
+    // 2. Not start a timer for 250 ms, timer fires call finalize()
+    VerifyOrReturn(sdCtx->HasAddress(), sdCtx->Finalize(kDNSServiceErr_BadState));
+
+    if (!sdCtx->startSrpTimerForResolve)
+    {
+        ChipLogProgress(Discovery, "Mdns: Resolve completed.");
         sdCtx->Finalize();
+    }
+    else
+    {
+        ChipLogProgress(Discovery,
+                        "Mdns: Resolve completed on the default domain. Starting a timer for the srp resolve to come back");
+
+        // Usually the resolution on the default domain is quicker than on the srp domain. We would like to give the
+        // resolution on the srp domain around 250 millisecs more to give it a chance to resolve before finalizing
+        // the resolution.
+        if (!sdCtx->hasSrpTimerStarted)
+        {
+            // Schedule a timer to allow the resolve on Srp domain to complete.
+            CHIP_ERROR error = StartSrpTimer(kSrpTimeoutInMsec, sdCtx);
+
+            // If the timer fails to start, finalize the context and return.
+            if (error != CHIP_NO_ERROR)
+            {
+                sdCtx->Finalize();
+                return;
+            }
+            sdCtx->hasSrpTimerStarted = true;
+            sdCtx->Finalize();
+        }
     }
 }
 
-static void GetAddrInfo(ResolveContext * sdCtx)
+static void GetAddrInfo(AdditionalResolveContext * additionalContext)
 {
+    auto sdCtx = reinterpret_cast<ResolveContext *>(additionalContext->context);
     auto protocol = sdCtx->protocol;
 
     for (auto & interface : sdCtx->interfaces)
@@ -263,7 +339,7 @@ static void GetAddrInfo(ResolveContext * sdCtx)
         auto interfaceId = interface.first.interfaceId;
         auto hostname    = interface.second.fullyQualifiedDomainName.c_str();
         auto sdRefCopy   = sdCtx->serviceRef; // Mandatory copy because of kDNSServiceFlagsShareConnection
-        auto err = DNSServiceGetAddrInfo(&sdRefCopy, kGetAddrInfoFlags, interfaceId, protocol, hostname, OnGetAddrInfo, sdCtx);
+        auto err = DNSServiceGetAddrInfo(&sdRefCopy, kGetAddrInfoFlags, interfaceId, protocol, hostname, OnGetAddrInfo, additionalContext);
         VerifyOrReturn(kDNSServiceErr_NoError == err, sdCtx->Finalize(err));
     }
 }
@@ -274,19 +350,54 @@ static void OnResolve(DNSServiceRef sdRef, DNSServiceFlags flags, uint32_t inter
 {
     ChipLogProgress(Discovery, "Mdns: %s flags: %d, interface: %u, fullname: %s, hostname: %s, port: %u", __func__, flags,
                     (unsigned) interfaceId, StringOrNullMarker(fullname), StringOrNullMarker(hostname), ntohs(port));
-    auto sdCtx = reinterpret_cast<ResolveContext *>(context);
+
+    // context is either localResolveContext or srpLocalContext can get bool out of it
+    auto additionalContext = reinterpret_cast<AdditionalResolveContext *>(context);
+    ChipLogProgress(Discovery, "Mdns: OnResolve 1");
+    VerifyOrReturn(additionalContext != nullptr, ChipLogError(Discovery, "Context is null"));
+    ChipLogProgress(Discovery, "Mdns: OnResolve 2");
+
+    auto sdCtx = reinterpret_cast<ResolveContext *>(additionalContext->context);
+    ChipLogProgress(Discovery, "Mdns: OnResolve 3");
     ReturnOnFailure(MdnsContexts::GetInstance().Has(sdCtx));
+    ChipLogProgress(Discovery, "Mdns: OnResolve 4");
     LogOnFailure(__func__, err);
 
     if (kDNSServiceErr_NoError == err)
     {
-        sdCtx->OnNewInterface(interfaceId, fullname, hostname, port, txtLen, txtRecord);
+        ChipLogProgress(Discovery, "Mdns: OnNewInterface 1");
+        sdCtx->OnNewInterface(interfaceId, fullname, hostname, port, txtLen, txtRecord, additionalContext->srpDomain);
     }
 
     if (!(flags & kDNSServiceFlagsMoreComing))
     {
+        ChipLogProgress(Discovery, "Mdns: OnResolve 5");
         VerifyOrReturn(sdCtx->HasInterface(), sdCtx->Finalize(kDNSServiceErr_BadState));
-        GetAddrInfo(sdCtx);
+
+        InterfaceKey interfaceKey;
+        interfaceKey.interfaceId = interfaceId;
+        interfaceKey.hostname = std::string(hostname);
+        interfaceKey.resolveRequestedOnSRPDomain = additionalContext->srpDomain;
+        ChipLogProgress(Discovery, "Mdns: OnResolve 6 srpDomain %d", interfaceKey.resolveRequestedOnSRPDomain);
+
+        ChipLogError(Discovery, "Mdns: key has interfaceid %d and hostname %s", interfaceKey.interfaceId, interfaceKey.hostname.c_str());
+        // for the key to check was resolverequested check interfaces if a key exists if not resolve
+    
+        // if we requested resolve on srp, call getaddrinfo with srpcontext else call getaddrinfo with localcontext.
+    
+        // If a resolve was not requested on this context, call GetAddrInfo and set the flag entry in resolvedInterfaces to true.
+        bool present = (sdCtx->interfaces.find(interfaceKey) != sdCtx->interfaces.end());
+        ChipLogProgress(Discovery, "Mdns: OnResolve 7");
+
+        ChipLogError(Discovery, "Mdns: calling GetAddrInfo key present %d", present);
+
+        if (present && !(sdCtx->interfaces[interfaceKey].isResolveRequested))
+        {
+            ChipLogError(Discovery, "Mdns: calling GetAddrInfo for key has interfaceid %d and hostname %s", interfaceKey.interfaceId, interfaceKey.hostname.c_str());
+            GetAddrInfo(additionalContext);
+            sdCtx->interfaces[interfaceKey].isResolveRequested = true;
+            ChipLogProgress(Discovery, "Mdns: OnResolve 8");
+        }
     }
 }
 
@@ -301,11 +412,11 @@ static CHIP_ERROR Resolve(ResolveContext * sdCtx, uint32_t interfaceId, chip::In
 
     // Similar to browse, will try to resolve using both the default domain and the srp domain.
     auto sdRefLocal = sdCtx->serviceRef; // Mandatory copy because of kDNSServiceFlagsShareConnection
-    err             = DNSServiceResolve(&sdRefLocal, kResolveFlags, interfaceId, name, type, kLocalDot, OnResolve, sdCtx);
+    err             = DNSServiceResolve(&sdRefLocal, kResolveFlags, interfaceId, name, type, kLocalDot, OnResolve, &sdCtx->localResolveContext);
     VerifyOrReturnError(kDNSServiceErr_NoError == err, sdCtx->Finalize(err));
 
     auto sdRefSrp = sdCtx->serviceRef; // Mandatory copy because of kDNSServiceFlagsShareConnection
-    err           = DNSServiceResolve(&sdRefSrp, kResolveFlags, interfaceId, name, type, kSrpDot, OnResolve, sdCtx);
+    err           = DNSServiceResolve(&sdRefSrp, kResolveFlags, interfaceId, name, type, kSrpDot, OnResolve, &sdCtx->srpResolveContext);
     VerifyOrReturnError(kDNSServiceErr_NoError == err, sdCtx->Finalize(err));
 
     auto retval = MdnsContexts::GetInstance().Add(sdCtx, sdCtx->serviceRef);

@@ -60,6 +60,8 @@ struct BrowseWithDelegateContext;
 struct RegisterContext;
 struct ResolveContext;
 
+void CancelSrpTimer(ResolveContext * ctx);
+
 class MdnsContexts
 {
 public:
@@ -222,6 +224,7 @@ struct InterfaceInfo
     DnssdService service;
     std::vector<Inet::IPAddress> addresses;
     std::string fullyQualifiedDomainName;
+    bool isResolveRequested = false;
 };
 
 struct InterfaceKey
@@ -255,7 +258,8 @@ struct ResolveContext : public GenericContext
     std::string instanceName;
     std::shared_ptr<uint32_t> consumerCounter;
     BrowseContext * const browseThatCausedResolve; // Can be null
-    bool startSrpTimerForResolve = true;
+    bool startSrpTimerForResolve = false;
+    bool hasSrpTimerStarted = false;
 
     AdditionalResolveContext srpResolveContext;
     AdditionalResolveContext localResolveContext;
@@ -275,7 +279,7 @@ struct ResolveContext : public GenericContext
     bool HasAddress();
 
     void OnNewInterface(uint32_t interfaceId, const char * fullname, const char * hostname, uint16_t port, uint16_t txtLen,
-                        const unsigned char * txtRecord);
+                        const unsigned char * txtRecord, bool isOnSRPDomain);
     bool HasInterface();
     bool Matches(const char * otherInstanceName) const { return instanceName == otherInstanceName; }
 

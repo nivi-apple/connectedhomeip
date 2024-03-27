@@ -486,7 +486,15 @@ ResolveContext::ResolveContext(CommissioningResolveDelegate * delegate, chip::In
     consumerCounter = std::move(consumerCounterToUse);
 }
 
-ResolveContext::~ResolveContext() {}
+ResolveContext::~ResolveContext() {
+    if (this->hasSrpTimerStarted)
+    {
+        CancelSrpTimer(this);
+    }
+    srpResolveContext = {};
+    localResolveContext = {};
+
+}
 
 void ResolveContext::DispatchFailure(const char * errorStr, CHIP_ERROR err)
 {
@@ -655,7 +663,7 @@ bool ResolveContext::HasAddress()
 }
 
 void ResolveContext::OnNewInterface(uint32_t interfaceId, const char * fullname, const char * hostnameWithDomain, uint16_t port,
-                                    uint16_t txtLen, const unsigned char * txtRecord)
+                                    uint16_t txtLen, const unsigned char * txtRecord, bool isOnSRPDomain)
 {
 #if CHIP_PROGRESS_LOGGING
     std::string txtString;
@@ -721,7 +729,8 @@ void ResolveContext::OnNewInterface(uint32_t interfaceId, const char * fullname,
     InterfaceKey interfaceKey;
     interfaceKey.interfaceId = interfaceId;
     interfaceKey.hostname = hostnameWithDomain;
-    //interfaceKey.resolveRequestedOnSRPDomain = srpDomain;
+    interfaceKey.resolveRequestedOnSRPDomain = isOnSRPDomain;
+    ChipLogError(Discovery, "InterfaceKey has %d %s %d", interfaceId, hostnameWithDomain, isOnSRPDomain);
     interfaces.insert(std::make_pair(std::move(interfaceKey), std::move(interface)));
 }
 
@@ -738,7 +747,8 @@ InterfaceInfo::InterfaceInfo()
 
 InterfaceInfo::InterfaceInfo(InterfaceInfo && other) :
     service(std::move(other.service)), addresses(std::move(other.addresses)),
-    fullyQualifiedDomainName(std::move(other.fullyQualifiedDomainName))
+    fullyQualifiedDomainName(std::move(other.fullyQualifiedDomainName)),
+    isResolveRequested(other.isResolveRequested)
 {
     // Make sure we're not trying to free any state from the other DnssdService,
     // since we took over ownership of its allocated bits.
