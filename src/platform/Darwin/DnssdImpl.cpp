@@ -307,7 +307,7 @@ static void OnGetAddrInfo(DNSServiceRef sdRef, DNSServiceFlags flags, uint32_t i
     else
     {
         ChipLogProgress(Discovery,
-                        "Mdns: Resolve completed on the default domain. Starting a timer for the srp resolve to come back");
+                        "Mdns: Resolution was requested on srp domain. Starting a timer for the srp resolve to come back");
 
         // Usually the resolution on the default domain is quicker than on the srp domain. We would like to give the
         // resolution on the srp domain around 250 millisecs more to give it a chance to resolve before finalizing
@@ -324,7 +324,6 @@ static void OnGetAddrInfo(DNSServiceRef sdRef, DNSServiceFlags flags, uint32_t i
                 return;
             }
             sdCtx->hasSrpTimerStarted = true;
-            sdCtx->Finalize();
         }
     }
 }
