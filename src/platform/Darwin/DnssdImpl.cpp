@@ -77,6 +77,7 @@ void LogOnFailure(const char * name, DNSServiceErrorType err)
 CHIP_ERROR StartSRPTimer(uint16_t timeoutInMSecs, ResolveContext * ctx)
 {
     VerifyOrReturnValue(ctx != nullptr, CHIP_ERROR_INCORRECT_STATE);
+    ChipLogProgress(Discovery, "Starting SRP timer");
     return chip::DeviceLayer::SystemLayer().StartTimer(chip::System::Clock::Milliseconds16(timeoutInMSecs),
                                                        ResolveContext::SRPTimerExpiredCallback, static_cast<void *>(ctx));
 }
@@ -280,6 +281,7 @@ static void OnGetAddrInfo(DNSServiceRef sdRef, DNSServiceFlags flags, uint32_t i
     // we are done. Otherwise start the timer to give the resolve on SRP domain some extra time to complete.
     if (!sdCtx->shouldStartSRPTimerForResolve)
     {
+        ChipLogProgress(Discovery, "SRP timer not needed for resolve. Resolve completed");
         sdCtx->Finalize();
     }
     else
@@ -308,6 +310,7 @@ static void GetAddrInfo(ResolveContext * sdCtx)
     {
         if (interface.second.isDNSLookUpRequested)
         {
+            ChipLogProgress(Discovery, "DNS lookup was already requested for interface id %d hostname %s isSRPResult %d. Return.", interface.first.interfaceId, interface.first.hostname, interface.first.isSRPResult);
             continue;
         }
 
@@ -373,11 +376,15 @@ static CHIP_ERROR Resolve(ResolveContext * sdCtx, uint32_t interfaceId, chip::In
     // Otherwise we will try to resolve using both the local domain and the SRP domain.
     if (domain != nullptr)
     {
+        ChipLogProgress(Discovery, "Resolve on domain= %s type=%s name=%s interface=%", domain, PRIu32, StringOrNullMarker(type), StringOrNullMarker(name),
+                    interfaceId);
         ReturnErrorOnFailure(ResolveWithContext(sdCtx, interfaceId, type, name, domain, &sdCtx->resolveContextWithNonSRPType));
         sdCtx->shouldStartSRPTimerForResolve = false;
     }
     else
     {
+        ChipLogProgress(Discovery, "Resolve on domains local and SRP type=%s name=%s interface=%", domain, PRIu32, StringOrNullMarker(type), StringOrNullMarker(name),
+                    interfaceId);
         ReturnErrorOnFailure(ResolveWithContext(sdCtx, interfaceId, type, name, kLocalDot, &sdCtx->resolveContextWithNonSRPType));
 
         ReturnErrorOnFailure(ResolveWithContext(sdCtx, interfaceId, type, name, kSRPDot, &sdCtx->resolveContextWithNonSRPType));

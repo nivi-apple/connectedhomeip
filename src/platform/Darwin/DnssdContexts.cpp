@@ -626,12 +626,14 @@ void ResolveContext::SRPTimerExpiredCallback(chip::System::Layer * systemLayer, 
 {
     auto sdCtx = static_cast<ResolveContext *>(callbackContext);
     VerifyOrDie(sdCtx != nullptr);
+    ChipLogProgress(Discovery, "SRP timer expired. Resolve completed");
     sdCtx->Finalize();
 }
 
 void ResolveContext::CancelSRPTimer()
 {
     DeviceLayer::SystemLayer().CancelTimer(SRPTimerExpiredCallback, static_cast<void *>(this));
+    ChipLogProgress(Discovery, "SRP timer cancelled");
 }
 
 CHIP_ERROR ResolveContext::OnNewAddress(const InterfaceKey & interfaceKey, const struct sockaddr * address)
